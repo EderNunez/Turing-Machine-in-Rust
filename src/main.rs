@@ -9,34 +9,39 @@ struct Machine {
 
 impl Display for Machine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = format!("head: {}, ", self.head);
-        for i in 0..self.size {
-            s.push_str(&format!("{} -> ", i32::from(self.data[i])));
-        }
+        let s = self
+            .data
+            .iter()
+            .fold(format!("head: {}, ", self.head), |acc, b| {
+                format!("{}{} -> ", acc, u8::from(*b))
+            });
         write!(f, "{s}")
     }
 }
 
 impl Machine {
-    fn new(data: Vec<bool>, size: usize, head: usize) -> Self {
-        Self { data, size, head }
-    }
-
     fn machine_randomize(&mut self) {
-        for i in 0..self.size {
-            self.data[i] = rand::random();
-        }
+        self.data.iter_mut().for_each(|b| *b = rand::random());
     }
 
-    fn machine_execute(&mut self, inst: &Instruction) -> usize {
-        if self.data[self.head] == inst.expected {
-            self.data[self.head] = inst.write_yes;
-            self.head = (self.head as isize + inst.dir_yes as isize) as usize;
-            return inst.next_yes;
+    fn machine_execute(&mut self, inst: &Instruction, inst_count: usize) -> usize {
+        if self.head >= self.size {
+            return inst_count;
         }
-        self.data[self.head] = inst.write_no;
-        self.head = (self.head as isize + inst.dir_no as isize) as usize;
-        inst.next_no
+        if self.data[self.head] == inst.expected {
+            self.data[self.head] = inst.yes.write;
+            if self.head == 0 && (inst.yes.dir as i8) < 0 {
+                return inst_count;
+            }
+            self.head = (self.head as isize + inst.yes.dir as isize) as usize;
+            return inst.yes.next;
+        }
+        self.data[self.head] = inst.no.write;
+        if self.head == 0 && (inst.no.dir as i8) < 0 {
+            return inst_count;
+        }
+        self.head = (self.head as isize + inst.no.dir as isize) as usize;
+        inst.no.next
     }
 }
 
@@ -46,59 +51,55 @@ enum Direction {
     Stay = 0,
     Right = 1,
 }
+#[derive(Clone, Copy)]
+struct State {
+    write: bool,
+    dir: Direction,
+    next: usize,
+}
 
+impl State {
+    fn new(write: bool, dir: Direction, next: usize) -> Self {
+        Self { write, dir, next }
+    }
+}
+#[derive(Clone, Copy)]
 struct Instruction {
     expected: bool,
-
-    write_yes: bool,
-    dir_yes: Direction,
-    next_yes: usize,
-
-    write_no: bool,
-    dir_no: Direction,
-    next_no: usize,
+    yes: State,
+    no: State,
 }
 
 impl Instruction {
-    fn new(
-        expected: bool,
-        write_yes: bool,
-        dir_yes: Direction,
-        next_yes: usize,
-        write_no: bool,
-        dir_no: Direction,
-        next_no: usize,
-    ) -> Self {
-        Self {
-            expected,
-            write_yes,
-            dir_yes,
-            next_yes,
-            write_no,
-            dir_no,
-            next_no,
-        }
+    fn new(expected: bool, yes: State, no: State) -> Self {
+        Self { expected, yes, no }
     }
 }
+#[derive(Default)]
+struct Program {
+    machine: Machine,
+    insts: Vec<Instruction>,
+    inst_count: usize,
+    cur: usize,
+}
 fn main() {
-    let mut machine = Machine::default();
-    machine.size = 8;
-    machine.data = vec![false; machine.size];
-    machine.machine_randomize();
-    let insts = [Instruction::new(
+    let mut program = Program::default();
+    program.machine.size = 16;
+    program.machine.data = vec![false; program.machine.size];
+    program.machine.machine_randomize();
+
+    program.insts = vec![Instruction::new(
         false,
-        true,
-        Direction::Right,
-        2,
-        false,
-        Direction::Right,
-        0,
+        State::new(true, Direction::Right, 2),
+        State::new(false, Direction::Right, 0),
     )];
-    println!("{machine}");
-    let cur = insts.iter().fold(0, |mut acc, inst|{
-        acc = machine.machine_execute(inst);
-        println!("{machine}");
-        acc
-    });
-    println!("cur: {cur}");
+    program.inst_count = program.insts.len();
+    
+    println!("{}", program.machine);
+    while program.cur < program.inst_count {
+        program.cur = program
+            .machine
+            .machine_execute(&program.insts[program.cur], program.inst_count);
+        println!("{}", program.machine);
+    }
 }
