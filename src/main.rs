@@ -3,18 +3,20 @@ use std::fmt::Display;
 #[derive(Default)]
 struct Machine {
     size: usize,
-    data: Vec<bool>,
+    data: Box<[bool]>,
     head: usize,
 }
 
 impl Display for Machine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = self
+        let mut s = self
             .data
             .iter()
+            .take(self.size)
             .fold(format!("head: {}, ", self.head), |acc, b| {
                 format!("{}{} -> ", acc, u8::from(*b))
             });
+        s.push_str(&format!("{}", u8::from(self.data[self.head])));
         write!(f, "{s}")
     }
 }
@@ -78,23 +80,30 @@ impl Instruction {
 #[derive(Default)]
 struct Program {
     machine: Machine,
-    insts: Vec<Instruction>,
+    insts: Box<[Instruction]>,
     inst_count: usize,
     cur: usize,
 }
 fn main() {
+    let argv = std::env::args().collect::<Vec<_>>();
     let mut program = Program::default();
-    program.machine.size = 16;
-    program.machine.data = vec![false; program.machine.size];
-    program.machine.machine_randomize();
-
-    program.insts = vec![Instruction::new(
+    if argv.len() == 1 {
+        program.machine.size = 5;
+        program.machine.data = vec![false; program.machine.size].into_boxed_slice();
+        program.machine.machine_randomize();
+    } else {
+        program.machine.size = argv[1].len();
+        program.machine.data = vec![false; program.machine.size].into_boxed_slice();
+        (0..program.machine.size)
+            .for_each(|i| program.machine.data[i] = argv[1].as_bytes()[i] == b'1');
+    }
+    program.insts = Box::new([Instruction::new(
         false,
         State::new(true, Direction::Right, 2),
         State::new(false, Direction::Right, 0),
-    )];
+    )]);
     program.inst_count = program.insts.len();
-    
+
     println!("{}", program.machine);
     while program.cur < program.inst_count {
         program.cur = program
