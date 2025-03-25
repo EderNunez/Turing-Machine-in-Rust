@@ -65,7 +65,7 @@ impl State {
         Self { write, dir, next }
     }
 }
-#[derive(Clone, Copy)]
+
 struct Instruction {
     expected: bool,
     yes: State,
